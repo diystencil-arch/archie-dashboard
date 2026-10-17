@@ -20,7 +20,7 @@ textarea{width:100%;min-height:90px}.scroll{overflow:auto;max-height:480px}@medi
 <header><div><h1>💰 Archie – Financial Dashboard — Canada / CAD</h1><div class="mut">Self-employed · Fiscal Jan 1–Dec 31 · Offline, no data leaves your browser</div></div>
 <button class="ghost" id="theme">🌙 Light / Dark</button></header>
 <div class="wrap"><p><a href="index.html" style="color:var(--acc)">← Back to Archie Dashboard</a></p>
-<div class="card"><h2>Data</h2><p class="mut">Upload receipts, bank statements and CSVs in chat to Accountant — your data will appear here once processed.</p><div class="row"><button id="sample">Load SAMPLE dataset</button><button class="danger" id="clear">Clear / Delete sample</button><button class="ghost" id="export">Export transactions CSV</button></div><div id="msg" class="mut"></div></div>
+<div class="card"><h2>Data</h2><p class="mut">Upload receipts, bank statements and CSVs in chat to Accountant. The 3 receipts logged on Oct 17, 2026 are built in below and load automatically.</p><div class="row"><button id="real">Show real data (3 logged receipts)</button><button class="ghost" id="export">Export transactions CSV</button></div><div id="msg" class="mut">Showing real logged data: 3 transactions, $659.95 in expenses on 2026-10-17.</div></div>
 
 <div class="card"><h2>Filters</h2><div class="row">
 <label>From<input type="date" id="from"></label><label>To<input type="date" id="to"></label>
@@ -31,7 +31,7 @@ textarea{width:100%;min-height:90px}.scroll{overflow:auto;max-height:480px}@medi
 <label>Search<input id="q" placeholder="vendor, notes…"></label><button class="ghost" id="resetF">Reset filters</button></div></div>
 
 <div class="grid" id="kpis"></div>
-<div class="card"><h2>Spending by category</h2><div id="catChart"><p class="mut">No data yet — upload data in chat to Accountant, or try the SAMPLE dataset.</p></div></div>
+<div class="card"><h2>Spending by category</h2><div id="catChart"><p class="mut">No data in this filtered view.</p></div></div>
 <div class="grid"><div class="card"><h2>Top 10 vendors</h2><div id="topV"></div></div>
 <div class="card"><h2>Monthly income vs expenses</h2><div id="monthly"></div></div></div>
 <div class="grid"><div class="card"><h2>Budget vs actual</h2><div id="budgets"></div></div>
@@ -42,7 +42,8 @@ textarea{width:100%;min-height:90px}.scroll{overflow:auto;max-height:480px}@medi
 <div class="card"><h2>Transactions <span class="mut" id="count"></span></h2><div class="scroll"><table id="tbl"><thead></thead><tbody></tbody></table></div></div>
 </div>
 <script>
-let tx=[],props=[],morts=[],buds=[],recs=[],sortK='date',sortDir=1;
+const REAL_TX=[{"date": "2026-10-17", "vendor": "Costco Waterloo", "amount": -73.45, "tax": 8.45, "currency": "CAD", "category": "Subscriptions", "subcategory": "Memberships", "payment_method": "Mastercard ending 7184", "account": "Credit Card ending 7184", "property": "", "business_personal": "Personal", "tax_deductible": "N", "receipt_ref": "Invoice 193703", "notes": "Gold Star membership renewal - needs review: business use / deductible portion not yet confirmed"}, {"date": "2026-10-17", "vendor": "Costco Waterloo", "amount": -571.29, "tax": 33.92, "currency": "CAD", "category": "Groceries", "subcategory": "Bulk groceries", "payment_method": "Mastercard ending 7184", "account": "Credit Card ending 7184", "property": "", "business_personal": "Personal", "tax_deductible": "N", "receipt_ref": "Receipt photo (chat upload)", "notes": "39 items verified after $30.00 discounts - needs review: household/personal-care split not yet confirmed"}, {"date": "2026-10-17", "vendor": "Costco Waterloo", "amount": -15.21, "tax": 0, "currency": "CAD", "category": "Restaurants", "subcategory": "Food court", "payment_method": "Mastercard ending 5406", "account": "Credit Card ending 5406", "property": "", "business_personal": "Personal", "tax_deductible": "N", "receipt_ref": "Receipt photo (chat upload)", "notes": "Food court: cheese slice, fries and ice cream - tax not split out in logged summary"}];
+let tx=REAL_TX.map(x=>({...x})),props=[],morts=[],buds=[],recs=[],sortK='date',sortDir=1;
 const $=id=>document.getElementById(id), fmt=n=>new Intl.NumberFormat('en-CA',{style:'currency',currency:'CAD'}).format(n||0);
 function parseCSV(t){let rows=[],cur=[''],inQ=false,f=0;for(let i=0;i<t.length;i++){let c=t[i];if(inQ){if(c=='"'){if(t[i+1]=='"'){cur[f]+='"';i++}else inQ=false}else cur[f]+=c}else if(c=='"')inQ=true;else if(c==','){cur.push('');f++}else if(c=='\n'||c=='\r'){if(c=='\r'&&t[i+1]=='\n')i++;rows.push(cur);cur=[''];f=0}else cur[f]+=c}if(cur.length>1||cur[0])rows.push(cur);let h=rows.shift().map(x=>x.trim());return rows.filter(r=>r.join('').trim()).map(r=>Object.fromEntries(h.map((k,i)=>[k,(r[i]||'').trim()]))) }
 function load(kind,text){let d=parseCSV(text);if(kind=='tx'){tx=d.map(x=>({...x,amount:parseFloat(x.amount)||0,tax:parseFloat(x.tax)||0}));fillFilters()}if(kind=='prop')props=d;if(kind=='mort')morts=d;if(kind=='bud')buds=d;if(kind=='rec')recs=d;render();$('msg').textContent='Loaded '+d.length+' rows ('+kind+').'}
@@ -69,8 +70,7 @@ let sorted=[...d].sort((a,b)=>(a[sortK]>b[sortK]?1:-1)*sortDir);$('tbl').querySe
 document.querySelectorAll('th[data-k]').forEach(th=>th.onclick=()=>{let k=th.dataset.k;sortDir=sortK===k?-sortDir:1;sortK=k;render()})}
 ['from','to','fCat','fAcc','fProperty','fBP','q'].forEach(id=>$(id).addEventListener('input',render));
 $('resetF').onclick=()=>{['from','to','fCat','fAcc','fProperty','fBP','q'].forEach(id=>$(id).value='');render()};$('theme').onclick=()=>document.body.classList.toggle('dark');
-$('sample').onclick=()=>{load('tx','date,vendor,amount,tax,currency,category,subcategory,payment_method,account,property,business_personal,tax_deductible,receipt_ref,notes\n2026-01-05,SAMPLE - Etsy Sale,120,0,CAD,Income,Etsy Sales,,CIBC Bank Account 1,,Business,N,SAMPLE,DELETE SAMPLE\n2026-01-06,SAMPLE - Canada Post,-18.50,0,CAD,Shipping,Postage,Credit Card 1,CIBC Bank Account 1,,Business,Y,SAMPLE,DELETE SAMPLE\n2026-01-07,SAMPLE - Grocery Store,-65.20,0,CAD,Groceries,,,CIBC Bank Account 1,,Personal,N,SAMPLE,DELETE SAMPLE')};
-$('clear').onclick=()=>{tx=[];props=[];morts=[];buds=[];recs=[];fillFilters();render();$('msg').textContent='Cleared. No data loaded.'};
+$('real').onclick=()=>{tx=REAL_TX.map(x=>({...x}));fillFilters();render();$('msg').textContent='Showing real logged data: 3 transactions, $659.95 in expenses on 2026-10-17.'};
 $('export').onclick=()=>{let cols=['date','vendor','amount','tax','currency','category','subcategory','payment_method','account','property','business_personal','tax_deductible','receipt_ref','notes'];let csv=cols.join(',')+'\n'+filtered().map(r=>cols.map(c=>'"'+String(r[c]??'').replaceAll('"','""')+'"').join(',')).join('\n');let a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='transactions-export.csv';a.click()};
-render();
+fillFilters();render();$('msg').textContent='Showing real logged data: 3 transactions, $659.95 in expenses on 2026-10-17.';
 </script></body></html>
