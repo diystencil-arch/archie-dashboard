@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Archie – Financial Dashboard — CAD (Offline)</title>
+<style>
+:root{--bg:#f4f5f7;--card:#fff;--tx:#17202a;--mut:#667;--acc:#2563eb;--bad:#b91c1c;--good:#047857}
+body.dark{--bg:#111827;--card:#1f2937;--tx:#f3f4f6;--mut:#9ca3af}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--tx)}
+header{padding:16px 20px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;align-items:center}
+h1{font-size:20px;margin:0}h2{font-size:16px;margin:0 0 10px}.wrap{padding:0 20px 30px;max-width:1200px;margin:auto}
+.card{background:var(--card);border-radius:12px;padding:16px;margin:0 0 14px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.kpi b{font-size:22px;display:block}.mut{color:var(--mut);font-size:12px}button,.btn{background:var(--acc);color:#fff;border:0;padding:8px 12px;border-radius:8px;cursor:pointer;font-size:13px}
+button.ghost{background:transparent;color:var(--tx);border:1px solid var(--mut)}button.danger{background:var(--bad)}
+input,select,textarea{padding:8px;border:1px solid #9993;border-radius:8px;background:var(--card);color:var(--tx);max-width:100%}
+label{font-size:12px;color:var(--mut);display:grid;gap:4px} .row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:7px;border-bottom:1px solid #8883;text-align:left}th{cursor:pointer;white-space:nowrap}
+.bar{height:10px;background:var(--acc);border-radius:5px}.over{color:var(--bad);font-weight:700}.ok{color:var(--good)}
+textarea{width:100%;min-height:90px}.scroll{overflow:auto;max-height:480px}@media(max-width:600px){th,td{font-size:12px;padding:5px}}
+</style></head><body>
+<header><div><h1>💰 Archie – Financial Dashboard — Canada / CAD</h1><div class="mut">Self-employed · Fiscal Jan 1–Dec 31 · Offline, no data leaves your browser</div></div>
+<button class="ghost" id="theme">🌙 Light / Dark</button></header>
+<div class="wrap"><p><a href="index.html" style="color:var(--acc)">← Back to Archie Dashboard</a></p>
+<div class="card"><h2>Load data</h2><div class="row">
+<label>Transactions CSV<input type="file" id="fTx" accept=".csv,text/csv"></label>
+<label>Properties CSV<input type="file" id="fProp" accept=".csv"></label>
+<label>Mortgages CSV<input type="file" id="fMort" accept=".csv"></label>
+<label>Budgets CSV<input type="file" id="fBud" accept=".csv"></label>
+<label>Recurring CSV<input type="file" id="fRec" accept=".csv"></label>
+<button id="sample">Load SAMPLE dataset</button><button class="danger" id="clear">Clear / Delete sample</button><button class="ghost" id="export">Export transactions CSV</button>
+</div><p class="mut">Or paste transactions CSV below, then Parse. SAMPLE data is clearly labelled and deletable. Empty state shows until you load data.</p>
+<textarea id="paste" placeholder="Paste CSV here…"></textarea><p><button id="parsePaste">Parse pasted CSV</button></p><div id="msg" class="mut"></div></div>
+
+<div class="card"><h2>Filters</h2><div class="row">
+<label>From<input type="date" id="from"></label><label>To<input type="date" id="to"></label>
+<label>Category<select id="fCat"><option value="">All</option></select></label>
+<label>Account<select id="fAcc"><option value="">All</option></select></label>
+<label>Property<select id="fProperty"><option value="">All</option></select></label>
+<label>Type<select id="fBP"><option value="">All</option><option>Business</option><option>Personal</option></select></label>
+<label>Search<input id="q" placeholder="vendor, notes…"></label><button class="ghost" id="resetF">Reset filters</button></div></div>
+
+<div class="grid" id="kpis"></div>
+<div class="card"><h2>Spending by category</h2><div id="catChart"><p class="mut">No data yet — load a CSV or the SAMPLE dataset.</p></div></div>
+<div class="grid"><div class="card"><h2>Top 10 vendors</h2><div id="topV"></div></div>
+<div class="card"><h2>Monthly income vs expenses</h2><div id="monthly"></div></div></div>
+<div class="grid"><div class="card"><h2>Budget vs actual</h2><div id="budgets"></div></div>
+<div class="card"><h2>Recurring bills</h2><div id="recurring"></div></div></div>
+<div class="grid"><div class="card"><h2>Property &amp; mortgages</h2><div id="props"></div></div>
+<div class="card"><h2>Rentals</h2><div id="rentals"><p class="mut">Load rentals via transactions property filter; rent roll lives in rentals.csv — add tenants/rent there (no invented tenants).</p></div></div></div>
+<div class="card"><h2>Tax — deductible totals (Business, tax_deductible=Y)</h2><div id="tax"></div></div>
+<div class="card"><h2>Transactions <span class="mut" id="count"></span></h2><div class="scroll"><table id="tbl"><thead></thead><tbody></tbody></table></div></div>
+</div>
+<script>
+let tx=[],props=[],morts=[],buds=[],recs=[],sortK='date',sortDir=1;
+const $=id=>document.getElementById(id), fmt=n=>new Intl.NumberFormat('en-CA',{style:'currency',currency:'CAD'}).format(n||0);
+function parseCSV(t){let rows=[],cur=[''],inQ=false,f=0;for(let i=0;i<t.length;i++){let c=t[i];if(inQ){if(c=='"'){if(t[i+1]=='"'){cur[f]+='"';i++}else inQ=false}else cur[f]+=c}else if(c=='"')inQ=true;else if(c==','){cur.push('');f++}else if(c=='\n'||c=='\r'){if(c=='\r'&&t[i+1]=='\n')i++;rows.push(cur);cur=[''];f=0}else cur[f]+=c}if(cur.length>1||cur[0])rows.push(cur);let h=rows.shift().map(x=>x.trim());return rows.filter(r=>r.join('').trim()).map(r=>Object.fromEntries(h.map((k,i)=>[k,(r[i]||'').trim()]))) }
+function load(kind,text){let d=parseCSV(text);if(kind=='tx'){tx=d.map(x=>({...x,amount:parseFloat(x.amount)||0,tax:parseFloat(x.tax)||0}));fillFilters()}if(kind=='prop')props=d;if(kind=='mort')morts=d;if(kind=='bud')buds=d;if(kind=='rec')recs=d;render();$('msg').textContent='Loaded '+d.length+' rows ('+kind+').'}
+function filtered(){return tx.filter(x=>(!$('from').value||x.date>=$('from').value)&&(!$('to').value||x.date<=$('to').value)&&(!$('fCat').value||x.category===$('fCat').value)&&(!$('fAcc').value||x.account===$('fAcc').value)&&(!$('fProperty').value||x.property===$('fProperty').value)&&(!$('fBP').value||x.business_personal===$('fBP').value)&&(!$('q').value||JSON.stringify(x).toLowerCase().includes($('q').value.toLowerCase())))}
+function fillFilters(){for(let [id,key] of [['fCat','category'],['fAcc','account'],['fProperty','property']]){let s=$(id),v=s.value;s.innerHTML='<option value="">All</option>';[...new Set(tx.map(x=>x[key]).filter(Boolean))].sort().forEach(x=>s.innerHTML+='<option>'+x+'</option>');s.value=v}}
+function render(){let d=filtered(),inc=d.filter(x=>x.amount>0).reduce((a,x)=>a+x.amount,0),exp=d.filter(x=>x.amount<0).reduce((a,x)=>a+x.amount,0),nw=null;
+if(props.length||morts.length){let assets=props.reduce((a,x)=>a+(parseFloat(x.current_value)||0),0),liab=morts.reduce((a,x)=>a+(parseFloat(x.balance)||0),0);nw=assets-liab}
+$('kpis').innerHTML=[['Income',fmt(inc)],['Expenses',fmt(exp)],['Net (income+expenses)',fmt(inc+exp)],['Savings rate',inc?((inc+exp)/inc*100).toFixed(1)+'%':'—'],['Net worth (loaded CSVs only)',nw===null?'Load properties/mortgages CSV':fmt(nw)],['Transactions',d.length]].map(x=>'<div class="card kpi"><span class="mut">'+x[0]+'</span><b>'+x[1]+'</b></div>').join('');
+// category chart (SVG-ish bars)
+let by={};d.filter(x=>x.amount<0).forEach(x=>by[x.category||'Other']=(by[x.category||'Other']||0)-x.amount);let max=Math.max(1,...Object.values(by));
+$('catChart').innerHTML=Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([k,v])=>'<div style="margin:6px 0"><div class="mut">'+k+' — '+fmt(v)+'</div><div class="bar" style="width:'+(v/max*100)+'%"></div></div>').join('')||'<p class="mut">No expense data.</p>';
+// donut as inline SVG circles summary also provided via bars above (offline, accessible)
+let tv={};d.forEach(x=>tv[x.vendor||'Unknown']=(tv[x.vendor||'Unknown']||0)+Math.abs(x.amount));$('topV').innerHTML='<ol>'+Object.entries(tv).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([k,v])=>'<li>'+k+' — '+fmt(v)+'</li>').join('')+'</ol>';
+let mo={};d.forEach(x=>{let m=(x.date||'').slice(0,7)||'unknown';mo[m]=mo[m]||{i:0,e:0};x.amount>=0?mo[m].i+=x.amount:mo[m].e-=x.amount});$('monthly').innerHTML='<table><tr><th>Month</th><th>Income</th><th>Expenses</th><th>Net</th></tr>'+Object.entries(mo).sort().map(([k,v])=>'<tr><td>'+k+'</td><td>'+fmt(v.i)+'</td><td>'+fmt(v.e)+'</td><td>'+fmt(v.i-v.e)+'</td></tr>').join('')+'</table>';
+// budgets: actual from tx if budgets.csv actual blank
+$('budgets').innerHTML=buds.length?buds.map(b=>{let lim=parseFloat(b.monthly_limit)||0,act=b.actual!==''&&b.actual!=null?parseFloat(b.actual)||0:Math.abs(d.filter(x=>x.category===b.category&&x.amount<0).reduce((a,x)=>a+x.amount,0)),v=lim-act;return '<p class="'+(lim&&act>lim?'over':'ok')+'">'+b.category+': '+fmt(act)+' / '+fmt(lim)+(lim&&act>lim?' ⚠ OVER BUDGET':'')+' (variance '+fmt(v)+')</p>'}).join(''):'<p class="mut">Load budgets.csv to see alerts. Categories are in budgets.csv.</p>';
+let recTotal=recs.reduce((a,x)=>a+((parseFloat(x.amount)||0)*(x.frequency==='Yearly'?1/12:x.frequency==='Weekly'?52/12:1)),0);$('recurring').innerHTML=recs.length?recs.map(x=>'<p>'+x.name+' — '+fmt(parseFloat(x.amount)||0)+' '+x.frequency+' · next '+ (x.next_due||'—')+(x.cancel_candidate==='Y'?' · <span class="over">cancel candidate</span>':'')+'</p>').join('')+'<b>Estimated monthly total: '+fmt(recTotal)+'</b>':'<p class="mut">Load recurring_bills.csv. Monthly total: '+fmt(recTotal)+'</p>';
+$('props').innerHTML=(props.length||morts.length)?props.map(p=>{let m=morts.find(x=>x.mortgage_id===p.mortgage_id)||{};let eq=(parseFloat(p.current_value)||0)-(parseFloat(m.balance)||0);return '<p><b>'+(p.address||p.type)+'</b> ('+(p.type||'')+')<br>Value '+(p.current_value?fmt(+p.current_value):'—')+' · Mortgage balance '+(m.balance?fmt(+m.balance):'—')+' · Equity '+(p.current_value&&m.balance?fmt(eq):'—')+'<br>Rate '+(m.rate||'—')+' '+(m.rate_type||'')+' · Renewal '+(m.renewal_date||'—')+' · Payment '+(m.payment_amount?fmt(+m.payment_amount):'—')+' '+(m.payment_frequency||'')+'<br>Interest paid to date '+(m.interest_paid_to_date?fmt(+m.interest_paid_to_date):'—')+' · Principal paid '+(m.principal_paid_to_date?fmt(+m.principal_paid_to_date):'—')+'</p>'}).join(''):'<p class="mut">Load properties.csv + mortgages.csv. No balances/rates are invented — blank until you add them.</p>';
+let rent=d.filter(x=>x.category==='Income'&&/rent/i.test((x.subcategory||'')+' '+(x.vendor||'')));$('rentals').innerHTML+='<p>Rent income in filtered transactions: <b>'+fmt(rent.reduce((a,x)=>a+x.amount,0))+'</b> across '+rent.length+' rows. Full rent roll / late status is in rentals.csv.</p>';
+let taxD=d.filter(x=>x.tax_deductible==='Y');let tb={};taxD.forEach(x=>tb[x.category]=(tb[x.category]||0)+Math.abs(x.amount));$('tax').innerHTML='<b>Total deductible: '+fmt(taxD.reduce((a,x)=>a+Math.abs(x.amount),0))+'</b>'+Object.entries(tb).map(([k,v])=>'<p>'+k+': '+fmt(v)+'</p>').join('')+'<p class="mut">Estimated tax set-aside: enter your own rate with an accountant — not calculated from invented income.</p>';
+$('count').textContent='('+d.length+' shown)';let cols=['date','vendor','amount','tax','currency','category','subcategory','payment_method','account','property','business_personal','tax_deductible','receipt_ref','notes'];
+$('tbl').querySelector('thead').innerHTML='<tr>'+cols.map(c=>'<th data-k="'+c+'">'+c+' ↕</th>').join('')+'</tr>';
+let sorted=[...d].sort((a,b)=>(a[sortK]>b[sortK]?1:-1)*sortDir);$('tbl').querySelector('tbody').innerHTML=sorted.map(x=>'<tr>'+cols.map(c=>'<td>'+(c==='amount'||c==='tax'?fmt(parseFloat(x[c])||0):(x[c]||''))+'</td>').join('')+'</tr>').join('')||'<tr><td colspan="14" class="mut">Empty — load data to begin.</td></tr>';
+document.querySelectorAll('th[data-k]').forEach(th=>th.onclick=()=>{let k=th.dataset.k;sortDir=sortK===k?-sortDir:1;sortK=k;render()})}
+['fTx','fProp','fMort','fBud','fRec'].forEach((id,i)=>$(id).onchange=e=>{let f=e.target.files[0];if(f)f.text().then(t=>load(['tx','prop','mort','bud','rec'][i],t))});
+$('parsePaste').onclick=()=>load('tx',$('paste').value);['from','to','fCat','fAcc','fProperty','fBP','q'].forEach(id=>$(id).addEventListener('input',render));
+$('resetF').onclick=()=>{['from','to','fCat','fAcc','fProperty','fBP','q'].forEach(id=>$(id).value='');render()};$('theme').onclick=()=>document.body.classList.toggle('dark');
+$('sample').onclick=()=>{load('tx','date,vendor,amount,tax,currency,category,subcategory,payment_method,account,property,business_personal,tax_deductible,receipt_ref,notes\n2026-01-05,SAMPLE - Etsy Sale,120,0,CAD,Income,Etsy Sales,,CIBC Bank Account 1,,Business,N,SAMPLE,DELETE SAMPLE\n2026-01-06,SAMPLE - Canada Post,-18.50,0,CAD,Shipping,Postage,Credit Card 1,CIBC Bank Account 1,,Business,Y,SAMPLE,DELETE SAMPLE\n2026-01-07,SAMPLE - Grocery Store,-65.20,0,CAD,Groceries,,,CIBC Bank Account 1,,Personal,N,SAMPLE,DELETE SAMPLE')};
+$('clear').onclick=()=>{tx=[];props=[];morts=[];buds=[];recs=[];$('paste').value='';fillFilters();render();$('msg').textContent='Cleared. No data loaded.'};
+$('export').onclick=()=>{let cols=['date','vendor','amount','tax','currency','category','subcategory','payment_method','account','property','business_personal','tax_deductible','receipt_ref','notes'];let csv=cols.join(',')+'\n'+filtered().map(r=>cols.map(c=>'"'+String(r[c]??'').replaceAll('"','""')+'"').join(',')).join('\n');let a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='transactions-export.csv';a.click()};
+render();
+</script></body></html>
